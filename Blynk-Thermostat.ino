@@ -256,7 +256,7 @@ yield();
 
 
 BLYNK_CONNECTED(){
-  Blynk.syncVirtual(V10, V11, V13, V12, V16,V14,V19);  // sink on connection
+  Blynk.syncVirtual(V10, V11, V13, V12, V16,V14,V19);  // synk on connection
 yield();
 }
 
@@ -396,10 +396,10 @@ BLYNK_WRITE(V12) {
           interval = 0;
         }
       }
-      // interval: 15:00 - 3:00 - ora 04:00
+      // eg: interval: 15:00 - 3:00 fgsfdfgsd
       if (t.getStartHour() > hour() && hour() > t.getStopHour() )
       {
-        Serial.println("a trecut de interval.In afara intervalului!");
+        Serial.println("current H>StartH && CurrentH > StopH");
         interval = 0;
       }
       if (t.getStartHour() > hour() && hour() == t.getStopHour() )
