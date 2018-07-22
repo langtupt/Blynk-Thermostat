@@ -396,7 +396,7 @@ BLYNK_WRITE(V12) {
           interval = 0;
         }
       }
-      // eg: interval: 15:00 - 3:00 fgsfdfgsd
+      // eg: interval: 15:00 - 3:00 
       if (t.getStartHour() > hour() && hour() > t.getStopHour() )
       {
         Serial.println("current H>StartH && CurrentH > StopH");
@@ -404,29 +404,29 @@ BLYNK_WRITE(V12) {
       }
       if (t.getStartHour() > hour() && hour() == t.getStopHour() )
       {
-        Serial.println("Ultima ora din interval. verifica minutele!");
+        Serial.println("StartH>Hour && Hour==StopH , check minutes");
         if (t.getStopMinute() <= minute() )
         {
-          Serial.println("Au trecut cateva minute peste interval. In afara intervalului!");
+          Serial.println("Few minutes over the given interval. Stop!");
           interval = 0;
         }
         else 
         {
-          Serial.println("In ultima ora, dar mai sunt cateva minute.In interval!");
+          Serial.println("Last Hour.Check the minutes");
           interval = 1;
         }
       }
       yield();
       if(t.getStartHour() > hour() && hour() < t.getStopHour() )
       {
-        Serial.println("Dupa miezul noptii, inainte de incheiera intervalului");
+        Serial.println("StartH>H, H<StopH - During the given interval");
         interval = 1;
       }
 
-      //inainte de  miezul noptii, in interval
+      //during the interval StartH<H , H>StopH
       if (t.getStartHour() < hour() && hour() > t.getStopHour() )
       {
-        Serial.println("Intervalul se incheie ziua urmatoare.Acum ora este Inainte de miezul noptii, in interval");
+        Serial.println("during the interval StartH<H , H>StopH");
         interval = 1;
       }
 
@@ -737,7 +737,7 @@ void TempCompare()
             }
             else {
               HeatOff();
-              Serial.println("Keep it off til it drops by one deg");              
+              Serial.println("Keep it off til it drops by one degree");              
             }
           }
 }
