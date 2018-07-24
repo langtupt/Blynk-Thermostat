@@ -385,12 +385,12 @@ BLYNK_WRITE(V12) {
       if (t.getStartHour() == hour())
       {
         Serial.println("StartHour=Hour - During the interval.Check the minutes");
-        if (t.getStartMinute() <= minute() && minute() <= t.getEndMinute() )
+        if (t.getStartMinute() <= minute() && minute() <= t.getStopMinute() )
         {
-          Serial.println("StartHour=Hour StartMinute<=Minute<=EndMinute");
+          Serial.println("StartHour=Hour StartMinute<=Minute<=StopMinute");
           interval = 1;
         }
-        if (t.getStartMinute() > minute() || minute() > t.getEndMinute() )
+        if (t.getStartMinute() > minute() || minute() > t.getStopMinute() )
         {
           Serial.println("StartHour=Hour StartMinute>Minute or Minute>EndMinute");
           interval = 0;
