@@ -1,5 +1,3 @@
-<<<<<<< HEAD
-
 /*************************************************************
   Download latest Blynk library here:
     https://github.com/blynkkk/blynk-library/releases/latest
@@ -1556,6 +1554,3 @@ void TempCompare()
             }
           }
 }
-
->>>>>>> 4ca88ee5c4cea01be8d86b34548779efab4a8635
-
