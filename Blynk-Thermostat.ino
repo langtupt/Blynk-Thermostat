@@ -36,10 +36,11 @@
  V14 - LED status for heating/no heating status
  V15 - TempSet Increment Ajustment by app 
  V16 - Switch between Scheduled Interval or Manual
- V17 - 
- V18 - 
+ V17 - GPSTrigger - GPS trigger for the selected radius
+ V18 - GPSAutoOff - Switch for Activating the GPSAutoOff
  V19 - LedTimerInterval for monitoring the interval status  
- V20 - 
+ V20 - ledGPSTrigger for monitoring the proximity to the house
+ V21 - In radius monitoring
 
 
  *************************************************************/
@@ -65,7 +66,8 @@ BlynkTimer timer;
 
 WidgetLED ledHeatingStatus(V14);
 WidgetLED ledInterval(V19);
-
+WidgetLED ledGPSAutoOff(V20);
+WidgetLED ledGPSTrigger(V21);
 
 String display_temp;
 String display_humid;
@@ -73,7 +75,7 @@ String dispTempSet;
 
 int tempset; // tempset value from pin V13
 int tempset2; // lower treshold for triggering the heating
-int connectionattempts;  // restard the mcu after to many connection attempts
+int connectionattempts;  // restart the mcu after to many connection attempts
 
 
 float h;  //temperature value
@@ -85,20 +87,22 @@ bool STOPPED;
 bool interval;
 
 bool scheduled;
+bool GPSTrigger;
+bool GPSAutoOff;
 
 bool result;
 bool connection;
 
 // You should get Auth Token in the Blynk App.
 // Go to the Project Settings (nut icon).
-char auth[] = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
+char auth[] = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";  
 
 // Your WiFi credentials.
 // Set password to "" for open networks.
 char ssid[] = "SSID";
-char pass[] = "wifipass";
+char pass[] = "WIFIPASS";
 
-#define DHTPIN 10          // Temp sensor hardware pin on SD3/GPIO10
+#define DHTPIN 10          // Temp sensor hardware pin on SD3/GPIO10 - To check with a different library/different pin
 #define relay D1 //  relay  on GPIO5 , D1
 
 #define upPin D0 // increment tempset - GPIO10
@@ -112,12 +116,6 @@ bool prevDownState;
 #define DHTTYPE DHT22   // DHT 22, AM2302, AM2321
 
 DHT dht(DHTPIN, DHTTYPE, 22);
-// This function sends Arduino's up time every second to Virtual Pin (5).
-// In the app, Widget's reading frequency should be set to PUSH. This means
-// that you define how often to send data to Blynk App.
-
-
-
 
 //Using Static IP
 byte arduino_mac[] = { 0x2C, 0x3A, 0xE8, 0x0E, 0x5A, 0x36 };
@@ -130,16 +128,18 @@ IPAddress subnet_mask(255, 255, 255,   0);
 
 void setup()
 {
-  WiFi.hostname("SmartThermostat-V1.7");
+  WiFi.hostname("SmartThermostat-V2.0");
   WiFi.mode(WIFI_STA);
   // Debug console
-  //Serial.begin(9600);
+  Serial.begin(9600);
   WiFi.config(arduino_ip, gateway_ip, subnet_mask);
-
-  dht.begin();
+  
   yield();
+  
+  dht.begin();
   h = dht.readHumidity();
   t = dht.readTemperature(); // or dht.readTemperature(true) for Fahrenheit
+  
   yield();
   display.init();
   display.clear();
@@ -176,7 +176,7 @@ void setup()
 
   
   // Port defaults to 8266
-  // ArduinoOTA.setPort(8266);
+   ArduinoOTA.setPort(8266);
 
   // Hostname defaults to esp8266-[ChipID]
   // ArduinoOTA.setHostname("myesp8266");
@@ -188,21 +188,26 @@ void setup()
   // MD5(admin) = 21232f297a57a5a743894a0e4a801fc3
   // ArduinoOTA.setPasswordHash("21232f297a57a5a743894a0e4a801fc3");
 
-  ArduinoOTA.onStart([]() {
-      yield();
+  ArduinoOTA.onStart([]() 
+  {
+    yield();
     String type;
     if (ArduinoOTA.getCommand() == U_FLASH)
       type = "sketch";
     else // U_SPIFFS
       type = "filesystem";
-
+  
     // NOTE: if updating SPIFFS this would be the place to unmount SPIFFS using SPIFFS.end()
-    Serial.println("Start updating " + type);
+      Serial.println("Start updating " + type);
   });
-  ArduinoOTA.onEnd([]() {
+  
+  ArduinoOTA.onEnd([]() 
+  {
     Serial.println("\nEnd");
   });
-  ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
+  
+  ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) 
+  {
     Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
   });
   ArduinoOTA.onError([](ota_error_t error) {
@@ -214,7 +219,7 @@ void setup()
     else if (error == OTA_END_ERROR) Serial.println("End Failed");
     yield();
   });
-  ArduinoOTA.setHostname("Smart Thermostat 1.7"); // OPTIONAL NAME FOR OTA
+  ArduinoOTA.setHostname("Smart Thermostat 2.0"); // OPTIONAL NAME FOR OTA
   yield();
   ArduinoOTA.begin();
   yield();
@@ -256,7 +261,7 @@ yield();
 
 
 BLYNK_CONNECTED(){
-  Blynk.syncVirtual(V10, V11, V13, V12, V16,V14,V19);  // synk on connection
+  Blynk.syncVirtual(V10, V11, V12, V13,V14, V16,V17,V18,V19,V20,V21);  // synk on connection
 yield();
 }
 
@@ -385,12 +390,12 @@ BLYNK_WRITE(V12) {
       if (t.getStartHour() == hour())
       {
         Serial.println("StartHour=Hour - During the interval.Check the minutes");
-        if (t.getStartMinute() <= minute() && minute() <= t.getEndMinute() )
+        if (t.getStartMinute() <= minute() && minute() <= t.getStopMinute() )
         {
           Serial.println("StartHour=Hour StartMinute<=Minute<=EndMinute");
           interval = 1;
         }
-        if (t.getStartMinute() > minute() || minute() > t.getEndMinute() )
+        if (t.getStartMinute() > minute() || minute() > t.getStopMinute() )
         {
           Serial.println("StartHour=Hour StartMinute>Minute or Minute>EndMinute");
           interval = 0;
@@ -535,15 +540,16 @@ void displayDataBig() {
 
 void sendTemp()
 {
-  Blynk.syncVirtual(V12, V16,V14,V19);
   yield();
+  Blynk.syncVirtual(V12, V16,V17,V18,V14,V19,V20,V21);
+  
   h = dht.readHumidity();
   t = dht.readTemperature(); // or dht.readTemperature(true) for Fahrenheit
-  yield();
   if (isnan(h) || isnan(t)) {
     Serial.println("Failed to read from DHT sensor!");
     return;
   }
+    yield();
 
   display_temp = t;
   display_humid = h;
@@ -577,10 +583,29 @@ yield();
       yield();
     }
  }
-  else {
-     TempCompare();  
-     Serial.println("Thermostat is running non stop");   
+  else { // scheduled == 0
+    if (GPSAutoOff == 0){
+      TempCompare();  
+      Serial.println("Thermostat is running non stop");   
       yield();
+    }
+    if (GPSAutoOff == 1){ // GPSAutoOff is activated.When its on manual,keep heating only if you are at home
+      if (GPSTrigger == 0) //triggering when you leave the home
+      {
+        TempCompare();  
+        Serial.println("Thermostat is running again because you came back");   
+        yield();
+      }
+      else if (GPSTrigger == 1)
+      {
+        HeatOff();
+        STOPPED = 0; 
+        HEATING = 0;
+        Serial.println("Heating was turned off because it's set on manual, but there is nobody at home");
+        yield(); 
+      }
+    }
+
   }
   
  Blynk.virtualWrite(V13, tempset);       // update tempset at the same time with the temperature   
@@ -624,7 +649,7 @@ BLYNK_WRITE(V15) // ajust tempset by app buttons
 }
 
 
-BLYNK_WRITE(V16)   // ON = scheduled   - OFF = manual(check temperature allways)
+BLYNK_WRITE(V16)   // ON 1 = scheduled   - OFF 0 = manual(check temperature allways)
 { 
 
   //restoring int value
@@ -635,6 +660,49 @@ BLYNK_WRITE(V16)   // ON = scheduled   - OFF = manual(check temperature allways)
   Serial.println();
   yield();
   //Blynk.virtualWrite(V16, scheduled); //update state of the buttos as it is on the mcu
+}
+
+BLYNK_WRITE(V17)   // ON 1 = you are in the radius, youre at home  - OFF 0 = you left the home
+{ 
+
+  //restoring int value
+  GPSTrigger = param.asInt();
+  if (GPSTrigger == 0)
+  {
+    ledGPSTrigger.on();
+  }
+  else if (GPSTrigger == 1) // nobody is at home
+  {
+    ledGPSTrigger.off();    
+  }
+  Serial.println();
+  Serial.print("GPSTrigger=");
+  Serial.println(GPSTrigger);
+  Serial.println();
+  yield();
+  //Blynk.virtualWrite(V17, GPSTrigger); //update state of the buttos as it is on the mcu
+}
+
+BLYNK_WRITE(V18)   // ON 1 = GPSAutoOFF is activated, turn off the heating if it is on manual and there is nobody home   - OFF 0 = deactivated
+{ 
+
+  //restoring int value
+  GPSAutoOff = param.asInt();
+  if (GPSAutoOff == 1)
+  {
+    ledGPSAutoOff.on();
+  }
+  else if (GPSAutoOff == 0)
+  {
+    ledGPSAutoOff.off();
+  }
+  
+  Serial.println();
+  Serial.print("GPSAutoOff=");
+  Serial.println(GPSAutoOff);
+  Serial.println();
+  yield();
+  //Blynk.virtualWrite(V18, GPSAutoOff); //update state of the buttos as it is on the mcu
 }
 
 
@@ -741,5 +809,6 @@ void TempCompare()
             }
           }
 }
+
 
 
