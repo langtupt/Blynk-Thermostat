@@ -16,5 +16,3 @@ IoT thermostat using Blynk Platform
 	- Schedule working interval
 	- Auto disable when it's on Manual
 	
-- Known Issues:
-	- Successfull Temperature read rate is low . Data reading from DHT Sensor Fails too often
