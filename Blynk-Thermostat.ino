@@ -24,10 +24,10 @@
 
   WARNING :
   For this example you'll need the following libraries:
-  -
-  -
-  -
-
+  - Blynk
+  - DHTesp - https://desire.giesecke.tk/index.php/2018/01/30/esp32-dht11/
+  - Arduino OTA - https://github.com/esp8266/Arduino/blob/master/libraries/ArduinoOTA
+  - OLED SSD1306 - 
   
  Virtual Pins: 
 
