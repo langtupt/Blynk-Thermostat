@@ -42,7 +42,7 @@
  V18 - GPSAutoOff - Switch for Activating the GPSAutoOff
  V19 - LedTimerInterval for monitoring the interval status  
  V20 - ledGPSTrigger for monitoring the proximity to the house
- V21 - In radius monitoring
+ V21 - ledGPSTrigger In radius monitoring
 
 
  *************************************************************/
@@ -102,12 +102,12 @@ bool connection;
 
 // You should get Auth Token in the Blynk App.
 // Go to the Project Settings (nut icon).
-char auth[] = "xxxxxxxxxxxxxxxxxxxxxxxxxxx";
+char auth[] = "xxxxxxxxxxxxxxxxxxxxxxxxxxxx";
 
 // Your WiFi credentials.
 // Set password to "" for open networks.
 char ssid[] = "SSID";
-char pass[] = "WIFIPW";
+char pass[] = "WIFIPASS";
 
 #define relay D1 //  relay  on GPIO5 , D1
 
@@ -140,7 +140,7 @@ void setup()
   //Serial.begin(9600);
   WiFi.config(arduino_ip, gateway_ip, subnet_mask);
 
-  dht.setup(DHTPIN); // Connect DHT sensor to GPIO 10
+  dht.setup(DHTPIN, DHTesp::DHT22); // Connect DHT sensor to GPIO 10
   delay(dht.getMinimumSamplingPeriod());
   
 
@@ -169,12 +169,12 @@ void setup()
 
 
   // Setup a function to be called every second
-  timer.setInterval(5000L, sendTemp);
+  timer.setInterval(7000L, sendTemp);
   yield();
   //timer.setInterval(5000L, TempCompare);
   timer.setInterval(10000L, displayData); 
   yield();
-  timer.setInterval(2000L, timesync); 
+  timer.setInterval(5000L, timesync); 
   yield();  
   timer.setInterval(10000L, connectionstatus);
   yield();  
@@ -242,31 +242,13 @@ void setup()
 
 void loop()
 {
-  yield();
   ArduinoOTA.handle();
   yield();
-yield();
   Blynk.run();
-yield();
   dispTempSet = tempset;
-yield();
   timer.run();
-yield();
   ButtonsUpDown();
-yield();
-
-yield();  
-  if (interval == 1)
-  {
-    ledInterval.on();
-    yield();
-  }
-  else
-  {
-    ledInterval.off();
   yield();  
-  }
-
 }
 
 
@@ -276,9 +258,10 @@ BLYNK_CONNECTED(){
 yield();
 }
 
-void timesync()
+void timesync() //run this every 5 seconds
 {
-    Blynk.syncVirtual(V12);
+    Blynk.syncVirtual(V12,V17); //synk the time interval and the gps trigger.
+    //Every time the hours interval is received from server/app it runs the whole time check.To be improved!!!!!
     rtc.begin();
     yield();
 }
@@ -286,9 +269,6 @@ void timesync()
 
 void connectionstatus()
 {
-//  result = Blynk.connected();
-//  result = Blynk.connect(60);
-yield();
   connection = Blynk.connected();
   if (connection == 0)
   {
@@ -297,13 +277,13 @@ yield();
       Serial.print("connectionattempts");
       Serial.print(connectionattempts);
       Serial.println();
-      yield();
       display.init();
       display.clear();
       display.flipScreenVertically();
       display.setTextAlignment(TEXT_ALIGN_CENTER);
       display.setFont(ArialMT_Plain_10);
-      display.drawString(64, 0, " CONNECTING ...");   
+      display.drawString(64, 0, " CONNECTING ...");  
+      display.drawString(64,2, String(connectionattempts)); 
       display.display();
       yield();
   }
@@ -317,6 +297,9 @@ yield();
       ESP.restart();  
   }
 }
+
+// This function will be called every time The Widget
+// in Blynk app writes values to the Virtual Pin V12
 
 BLYNK_WRITE(V12) {
   TimeInputParam t(param);
@@ -332,25 +315,25 @@ BLYNK_WRITE(V12) {
 //  Serial.print(currentDate);
 //  Serial.println();
   
-    Serial.print(String(" Start: ") +
-                   t.getStartHour() + ":" +
-                   t.getStartMinute() + ":" +
-                   t.getStartSecond());
-    Serial.print(String("  Stop:") + 
-                   t.getStopHour() + ":" +
-                   t.getStopMinute() + ":" +
-                   t.getStopSecond());
-    if(interval== 1)
-    {
-      Serial.print(" = > Started!");               
-    }
-    else
-    {
-      Serial.print(" = > Stopped");
-    }
-                          
-    
-    Serial.println();  Serial.println();
+//    Serial.print(String(" Start: ") +
+//                   t.getStartHour() + ":" +
+//                   t.getStartMinute() + ":" +
+//                   t.getStartSecond());
+//    Serial.print(String("  Stop:") + 
+//                   t.getStopHour() + ":" +
+//                   t.getStopMinute() + ":" +
+//                   t.getStopSecond());
+//    if(interval== 1)
+//    {
+//      Serial.print(" = > Started!");               
+//    }
+//    else
+//    {
+//      Serial.print(" = > Stopped");
+//    }
+//                          
+//    
+//    Serial.println();  Serial.println();
     
 
     //--> Starting hour is the same as the ending hour. 
@@ -374,7 +357,6 @@ BLYNK_WRITE(V12) {
       }
     }
     // <--- Starting hour is the same as the ending hour. 
-    yield();
 
     // Stop time matches the current hour. Check the minutes.
     if (t.getStopHour() == hour() ) 
@@ -450,48 +432,46 @@ BLYNK_WRITE(V12) {
       }
 
     }
-    // ---> StartHour < StopHour
-    
-    //daca ora de inceput este mai mica decat ora de sfarsit atunci intervalul se incheie in aceeasi zi
+    // ---> StartHour < StopHour == sameday
     else if (t.getStartHour() < t.getStopHour() ) 
     {
-      Serial.println("Ora de sfarsit se incheie in aceeasi zi");
-      if (t.getStartHour() < hour() && t.getStopHour() > hour() )  // ora este mai mare decat ora starttime dar mai mica decat stoptime.
+      Serial.println("It's endind in the same day");
+      if (t.getStartHour() < hour() && t.getStopHour() > hour() )  
       {
-        Serial.println("Se afla in intervalul de ore, nu in aceeasi ora ed sfarsit, deci nu e nevoie sa verific minutele");
+        Serial.println("Current Hour < StartH and CurrentH < StopH.Interval match.No need to check the minutes");
         interval= 1;
       }
 
       if (t.getStartHour() == hour() )
       {
-        Serial.println("Valoarea orei se potriveste cu intervalul, verifica si minutele");
+        Serial.println("Start Hour match.Check the minutes");
         if (t.getStartMinute() <= minute())
         {
-          Serial.println("Se potrivesc si minutele. in interval");
+          Serial.println("Minutes match, ");
           interval=1;  
         }
         else 
         {
-          Serial.println("Minutele nu se potrivesc, In afara intervalului@");
+          Serial.println("Minutes do not match.Minutes>Startinute.Outside the interval");
           interval = 0;
         }
       }
       if (t.getStartHour() > hour() )
       {
-        Serial.println("Inca nu s-a apropiat intervalul.In afara intervalului");
+        Serial.println("CurrentH<StartH . Before the interval");
         interval = 0;
       }
       if (t.getStopHour() == hour())
       {
-        Serial.println("Ultima ora din interval.verifica minutele");
+        Serial.println("StopH match.Check the Minutes");
         if (t.getStopMinute() <= minute() )
         {
-          Serial.println("A depasit minutele.In afara intervalului!");
+          Serial.println("Minutes passed.Interval Ended");
           interval = 0;
         }
         else if (t.getStopMinute() > minute() )
         {
-          Serial.println("Nu au depasit minutele.In interval");
+          Serial.println("Minutes<StopMinutes - During the interval");
           interval = 1;
         }
       }
@@ -512,17 +492,8 @@ void displayData() {
     display.setFont(ArialMT_Plain_10);
     connection = Blynk.connected();
     if (connection == 0){
-      display.drawString(64, 0, "Disconnected . . .");        
+    display.drawString(64, 0, "Disconnected . . .");        
     }
-
-//    Serial.print(String(" Start: ") +
-//                   t.getStartHour() + ":" +
-//                   t.getStartMinute() + ":" +
-//                   t.getStartSecond());
-//    Serial.print(String("  Stop:") + 
-//                   t.getStopHour() + ":" +
-//                   t.getStopMinute() + ":" +
-//                   t.getStopSecond());
     
      else {
       if (scheduled == 1)
@@ -566,31 +537,24 @@ void displayDataBig() {
 void sendTemp()
 {
   yield();
-  Blynk.syncVirtual(V12,V14, V16,V17,V18,V14,V19,V20,V21);
   delay(dht.getMinimumSamplingPeriod());
-  
-//  h = dht.readHumidity();
-//  t = dht.readTemperature(); // or dht.readTemperature(true) for Fahrenheit
-//  if (isnan(h) || isnan(t)) {
-//    Serial.println("Failed to read from DHT sensor!");
-//    return;
-//  }
 
   h = dht.getHumidity();
   t = dht.getTemperature();
-    yield();
 
   display_temp = t;
   display_humid = h;
+  
   Serial.println(display_temp);
   Serial.println(display_humid);
-  
+
+
   // You can send any value at any time.
   // Please don't send more that 10 values per second.
   Blynk.virtualWrite(V10, t); //temperature on virtual pin V5
   Blynk.virtualWrite(V11, h); //humidity on virtual pin V6
-yield();
- if (scheduled == 1) {
+  yield();
+  if (scheduled == 1) {
     Serial.println("By Time");
     Serial.println();
     Serial.print("interval=");
@@ -637,7 +601,7 @@ yield();
 
   }
   
- Blynk.virtualWrite(V13, tempset);       // update tempset at the same time with the temperature   
+ Blynk.virtualWrite(V13, tempset);       // store tempset on server  
        yield();
 }
 
@@ -691,6 +655,7 @@ BLYNK_WRITE(V16)   // ON 1 = scheduled   - OFF 0 = manual(check temperature allw
   //Blynk.virtualWrite(V16, scheduled); //update state of the buttos as it is on the mcu
 }
 
+
 BLYNK_WRITE(V17)   // ON 1 = you are in the radius, youre at home  - OFF 0 = you left the home
 { 
 
@@ -737,7 +702,6 @@ BLYNK_WRITE(V18)   // ON 1 = GPSAutoOFF is activated, turn off the heating if it
 
 void ButtonsUpDown()
 {
-   /* Tratează cazul când s-a apăsat up pentru incrementarea tempset. */
   UpState = digitalRead(upPin);
   if (UpState != prevUpState) {
     if (UpState == LOW) {
@@ -752,7 +716,6 @@ void ButtonsUpDown()
     prevUpState = UpState;
   }
 
-  /* Tratează cazul când s-a apăsat down pentru decrementarea tempset. */
   DownState = digitalRead(downPin);
   if (DownState != prevDownState) {
     if (DownState == LOW) {
@@ -789,7 +752,7 @@ void HeatOff()
 
 void TempCompare()
 {
-  yield();
+   yield();
    tempset2 = tempset-1;   
           // incepe din starea
           // HEATING = 0
@@ -810,7 +773,7 @@ void TempCompare()
           }
           
           else if (HEATING == 1){
-            if (t > tempset){ // prima oprire a termoreleului
+            if (t > tempset){ // 
               HeatOff();
               STOPPED = 1;
               //Blynk.setProperty(V5, "color", "green");
@@ -825,8 +788,8 @@ void TempCompare()
           }
 
          
-          else if (STOPPED == 1){
-            if (t < tempset2){ // daca temperatura actuala A SCAZUT cu cel putin un grad fata de cea pe care a avut-o cand s-a oprit abi atunci incepe sa incalzeasca
+          else if (STOPPED == 1){         
+            if (t < tempset2){ // start heating again only if the temp dropped by one deg
               HeatOn();
               //Blynk.setProperty(V5, "color", "red");                             
               STOPPED = 0;
@@ -838,5 +801,6 @@ void TempCompare()
             }
           }
 }
+
 
 
