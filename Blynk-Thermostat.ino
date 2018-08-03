@@ -24,10 +24,12 @@
 
   WARNING :
   For this example you'll need the following libraries:
-  - Blynk
-  - DHTesp - https://desire.giesecke.tk/index.php/2018/01/30/esp32-dht11/
-  - Arduino OTA - https://github.com/esp8266/Arduino/blob/master/libraries/ArduinoOTA
-  - OLED SSD1306 - 
+	- Blynk
+	- DHTesp - https://desire.giesecke.tk/index.php/2018/01/30/esp32-dht11/
+	- Arduino OTA - https://github.com/esp8266/Arduino/blob/master/libraries/ArduinoOTA
+	- OLED SSD1306 - 
+
+
   
  Virtual Pins: 
 
@@ -107,7 +109,7 @@ char auth[] = "xxxxxxxxxxxxxxxxxxxxxxxxxxxx";
 // Your WiFi credentials.
 // Set password to "" for open networks.
 char ssid[] = "SSID";
-char pass[] = "WIFIPASS";
+char pass[] = "WIFIPW";
 
 #define relay D1 //  relay  on GPIO5 , D1
 
@@ -801,6 +803,5 @@ void TempCompare()
             }
           }
 }
-
 
 
