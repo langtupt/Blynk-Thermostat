@@ -1,4 +1,5 @@
 
+#define NAMEandVERSION "Blynk-Thermostat V2.3"
 /*************************************************************
   Download latest Blynk library here:
     https://github.com/blynkkk/blynk-library/releases/latest
@@ -116,8 +117,6 @@ char pass[] = "WIFIPW";
 #define upPin D0 // increment tempset - GPIO10
 #define downPin D5 // decrement tempset - GPIO14
 
-#define NAMEandVERSION "Blynk-Thermostat V2.2"
-
 bool UpState;
 bool prevUpState;
 bool DownState;
@@ -232,7 +231,7 @@ void setup()
     else if (error == OTA_END_ERROR) Serial.println("End Failed");
     yield();
   });
-  ArduinoOTA.setHostname("NAMEandVERSION"); // OPTIONAL NAME FOR OTA
+  ArduinoOTA.setHostname(NAMEandVERSION); // OPTIONAL NAME FOR OTA
   yield();
   ArduinoOTA.begin();
   yield();
@@ -539,7 +538,7 @@ void displayDataBig() {
 void sendTemp()
 {
   yield();
-  delay(dht.getMinimumSamplingPeriod());
+  //delay(dht.getMinimumSamplingPeriod());
 
   h = dht.getHumidity();
   t = dht.getTemperature();
