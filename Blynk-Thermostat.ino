@@ -1,5 +1,4 @@
-
-#define NAMEandVERSION "Blynk-Thermostat V2.3"
+#define NAMEandVERSION "Blynk-ThermostatV3.1"
 /*************************************************************
   Download latest Blynk library here:
     https://github.com/blynkkk/blynk-library/releases/latest
@@ -25,11 +24,10 @@
 
   WARNING :
   For this example you'll need the following libraries:
-	- Blynk
-	- DHTesp - https://desire.giesecke.tk/index.php/2018/01/30/esp32-dht11/
-	- Arduino OTA - https://github.com/esp8266/Arduino/blob/master/libraries/ArduinoOTA
-	- OLED SSD1306 - 
-
+  - Blynk
+  - DHTesp - https://desire.giesecke.tk/index.php/2018/01/30/esp32-dht11/
+  - Arduino OTA - https://github.com/esp8266/Arduino/blob/master/libraries/ArduinoOTA
+  - OLED SSD1306 - 
 
   
  Virtual Pins: 
@@ -51,14 +49,13 @@
  *************************************************************/
 
 /* Comment this out to disable prints and save space */
-//#define BLYNK_PRINT Serial
+#define BLYNK_PRINT Serial
 
-#include <ESP8266mDNS.h>
-#include <WiFiUdp.h>
-#include <ArduinoOTA.h>
+//#include <ESP8266mDNS.h>
+//#include <WiFiUdp.h>
+//#include <ArduinoOTA.h>
 #include <ESP8266WiFi.h>
 #include <BlynkSimpleEsp8266.h>
-//#include <DHT.h> old
 
 #define DHTPIN 10          // Temp sensor hardware pin on SD3/GPIO10
 #include "DHTesp.h"
@@ -91,6 +88,13 @@ float h;  //temperature value
 float t ; //humidity value
 String Interval;
 
+int StartHour = 0;
+int StopHour = 0;
+int StartMinute = 0;
+int StopMinute = 0;
+int Hour = 0;
+int Minute = 0;
+
 
 bool HEATING;
 bool STOPPED;
@@ -105,17 +109,19 @@ bool connection;
 
 // You should get Auth Token in the Blynk App.
 // Go to the Project Settings (nut icon).
-char auth[] = "xxxxxxxxxxxxxxxxxxxxxxxxxxxx";
+char auth[] = "xxxxxxxxxxxxxx";
 
 // Your WiFi credentials.
 // Set password to "" for open networks.
-char ssid[] = "SSID";
-char pass[] = "WIFIPW";
+char ssid[] = "Home";
+char pass[] = "xxxxxxxxxxxxxx";
 
 #define relay D1 //  relay  on GPIO5 , D1
 
 #define upPin D0 // increment tempset - GPIO10
 #define downPin D5 // decrement tempset - GPIO14
+
+
 
 bool UpState;
 bool prevUpState;
@@ -127,7 +133,7 @@ bool prevDownState;
 //Using Static IP
 byte arduino_mac[] = { 0x2C, 0x3A, 0xE8, 0x0E, 0x5A, 0x36 };
 IPAddress arduino_ip ( 192,  168,   1,  10);
-//IPAddress dns_ip     (  8,   8,   8,   8);
+IPAddress dns_ip     ( 192,  168,   1,   1);
 IPAddress gateway_ip ( 192,  168,   1,   1);
 IPAddress subnet_mask(255, 255, 255,   0);
 
@@ -138,17 +144,43 @@ void setup()
   WiFi.hostname(NAMEandVERSION);
   WiFi.mode(WIFI_STA);
   // Debug console
-  //Serial.begin(9600);
+  Serial.begin(9600);
+  
+  pinMode (relay, OUTPUT);
+  pinMode (upPin, INPUT);
+  pinMode (downPin, INPUT);
+  pinMode (DHTPIN, INPUT);
+  
   WiFi.config(arduino_ip, gateway_ip, subnet_mask);
+  
+ // OTAdebug();
+  displayInitSeq();
+  
+  // Setup a function to be called every second
+  timer.setInterval(8000L, sendTemp);
+  timer.setInterval(5000L, HeatingLogic);
+  timer.setInterval(3000L, displayData); 
+  timer.setInterval(5000L, timesync);   
+  timer.setInterval(10000L, connectionstatus);
+}
 
+void loop()
+{
+  Blynk.run();
+  timer.run();
+  //ArduinoOTA.handle();
+  dispTempSet = tempset;
+  ButtonsUpDown();
+}
+
+void displayInitSeq()
+{
   dht.setup(DHTPIN, DHTesp::DHT22); // Connect DHT sensor to GPIO 10
   delay(dht.getMinimumSamplingPeriod());
-  
-
   h = dht.getHumidity();
   t = dht.getTemperature();
   if (isnan(h) || isnan(t)) {
-    Serial.println("Failed to read from DHT sensor!");
+   Serial.println("Failed to read from DHT sensor!");
     return;
   }
 
@@ -158,111 +190,179 @@ void setup()
   display.flipScreenVertically();
   display.setTextAlignment(TEXT_ALIGN_CENTER);
   display.setFont(ArialMT_Plain_10);
-  display.drawString(64, 0, " CONNECTING ...");   
+  display.drawString(64, 0, String(NAMEandVERSION)); 
   display.display();
-  yield();
-//  Blynk.begin(auth, ssid, pass);
-  yield();
-  // You can also specify server:
-  //Blynk.begin(auth, ssid, pass, "blynk-cloud.com", 8442);
-  //Or for local server:
-  Blynk.begin(auth, ssid, pass, IPAddress(192,168,1,3), 8080);
-
-
-  // Setup a function to be called every second
-  timer.setInterval(7000L, sendTemp);
-  yield();
-  //timer.setInterval(5000L, TempCompare);
-  timer.setInterval(10000L, displayData); 
-  yield();
-  timer.setInterval(5000L, timesync); 
-  yield();  
-  timer.setInterval(10000L, connectionstatus);
-  yield();  
-  
-  pinMode (relay, OUTPUT);
-  pinMode (upPin, INPUT);
-  pinMode (downPin, INPUT);
-  pinMode (DHTPIN, INPUT);
-
-
-  
-  // Port defaults to 8266
-   ArduinoOTA.setPort(8266);
-
-  // Hostname defaults to esp8266-[ChipID]
-  // ArduinoOTA.setHostname("myesp8266");
-
-  // No authentication by default
-  // ArduinoOTA.setPassword("admin");
-
-  // Password can be set with it's md5 value as well
-  // MD5(admin) = 21232f297a57a5a743894a0e4a801fc3
-  // ArduinoOTA.setPasswordHash("21232f297a57a5a743894a0e4a801fc3");
-
-  ArduinoOTA.onStart([]() 
-  {
-    yield();
-    String type;
-    if (ArduinoOTA.getCommand() == U_FLASH)
-      type = "sketch";
-    else // U_SPIFFS
-      type = "filesystem";
-  
-    // NOTE: if updating SPIFFS this would be the place to unmount SPIFFS using SPIFFS.end()
-      Serial.println("Start updating " + type);
-  });
-  
-  ArduinoOTA.onEnd([]() 
-  {
-    Serial.println("\nEnd");
-  });
-  
-  ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) 
-  {
-    Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
-  });
-  ArduinoOTA.onError([](ota_error_t error) {
-    Serial.printf("Error[%u]: ", error);
-    if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
-    else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
-    else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
-    else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
-    else if (error == OTA_END_ERROR) Serial.println("End Failed");
-    yield();
-  });
-  ArduinoOTA.setHostname(NAMEandVERSION); // OPTIONAL NAME FOR OTA
-  yield();
-  ArduinoOTA.begin();
+  WiFi.begin(ssid, pass);  
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(1000);
+    Serial.print(".");
+    display.drawString(64, 10, "Connecting to Wifi...");
+    display.display();
+  }
+  Serial.println("");
+  Serial.println("WiFi connected");
+  display.drawString(64, 20, "WiFi connected!");  
+  Serial.println("IP address: ");
+  Serial.println(WiFi.localIP()); 
+  display.drawString(64, 30, "Local IP: " + String(WiFi.localIP().toString()) );
+  display.display();  
+  while (Blynk.connected() == false) {
+    display.drawString(64, 40, "Connecting to Server...");
+    delay(1000);
+    display.display();
+    Blynk.begin(auth, ssid, pass, IPAddress(192,168,1,3), 8441);
+  }
+  display.drawString(64, 50, "Connected to Server!");
+  Serial.println("Connected to Blynk server");
+  display.display();
   yield();
   Serial.println("Ready");
   Serial.print("IP address: ");
-  Serial.println(WiFi.localIP());
-  
+  Serial.println(WiFi.localIP());  
 }
 
-void loop()
-{
-  ArduinoOTA.handle();
-  yield();
-  Blynk.run();
-  dispTempSet = tempset;
-  timer.run();
-  ButtonsUpDown();
-  yield();  
-}
-
-
+//void OTAdebug()
+//{
+//  // Port defaults to 8266
+//   ArduinoOTA.setPort(8266);
+//
+//  // Hostname defaults to esp8266-[ChipID]
+//  // ArduinoOTA.setHostname("myesp8266");
+//
+//  // No authentication by default
+//  // ArduinoOTA.setPassword("admin");
+//
+//  // Password can be set with it's md5 value as well
+//  // MD5(admin) = 21232f297a57a5a743894a0e4a801fc3
+//  // ArduinoOTA.setPasswordHash("21232f297a57a5a743894a0e4a801fc3");
+//
+//  ArduinoOTA.onStart([]() 
+//  {
+//    yield();
+//    String type;
+//    if (ArduinoOTA.getCommand() == U_FLASH)
+//      type = "sketch";
+//    else // U_SPIFFS
+//      type = "filesystem";
+//  
+//    // NOTE: if updating SPIFFS this would be the place to unmount SPIFFS using SPIFFS.end()
+//     Serial.println("Start updating " + type);
+//  });
+//  
+//  ArduinoOTA.onEnd([]() 
+//  {
+//   Serial.println("\nEnd");
+//  });
+//  
+//  ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) 
+//  {
+//   Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
+//  });
+//  ArduinoOTA.onError([](ota_error_t error) {
+//   Serial.printf("Error[%u]: ", error);
+//    if (error == OTA_AUTH_ERROR)Serial.println("Auth Failed");
+//    else if (error == OTA_BEGIN_ERROR)Serial.println("Begin Failed");
+//    else if (error == OTA_CONNECT_ERROR)Serial.println("Connect Failed");
+//    else if (error == OTA_RECEIVE_ERROR)Serial.println("Receive Failed");
+//    else if (error == OTA_END_ERROR)Serial.println("End Failed");
+//    yield();
+//  });
+//  ArduinoOTA.setHostname(NAMEandVERSION); // OPTIONAL NAME FOR OTA
+//  yield();
+//  ArduinoOTA.begin();
+//  yield();  
+//}
 
 BLYNK_CONNECTED(){
   Blynk.syncVirtual(V10, V11, V12, V13,V14, V16,V17,V18,V19,V20,V21);  // synk on connection
 yield();
 }
+BLYNK_WRITE(V12) {  
+    TimeInputParam t(param);
+    StartHour = t.getStartHour();
+    StopHour = t.getStopHour();
+    StartMinute = t.getStartMinute();
+    StopMinute = t.getStopMinute();
+    Hour = hour();
+    Minute = minute();
+    yield(); 
+}
+
+
+BLYNK_WRITE(V13)
+{
+  //restoring int value
+  tempset = param.asInt();
+  Serial.println("tempset updated");
+  yield();
+}
+
+BLYNK_WRITE(V15) // ajust tempset by app buttons
+{
+  int stepperValue = param.asInt();
+  if (stepperValue == 1)       // assigning incoming value from pin V1 to a variable
+  {
+    tempset++;
+    Blynk.virtualWrite(V13, tempset);
+    Serial.println(tempset);
+    displayData();
+    yield();
+  }
+  else if (stepperValue == -1) 
+  {
+    tempset--;
+    Blynk.virtualWrite(V13, tempset);
+    Serial.println(tempset);
+    yield();
+    displayData();
+  }
+  // process received value
+  //Blynk.virtualWrite(V13, tempset);
+  yield();
+  //Serial.println(param.asInt());  
+  Serial.println(stepperValue);  
+}
+
+BLYNK_WRITE(V16)   // ON 1 = scheduled   - OFF 0 = manual(check temperature allways)
+{ 
+  //restoring int value
+  scheduled = param.asInt();
+  Serial.println();
+  Serial.print("scheduled=");
+  Serial.println(scheduled);
+  Serial.println();
+  yield();
+  //Blynk.virtualWrite(V16, scheduled); //update state of the buttos as it is on the mcu
+}
+
+BLYNK_WRITE(V17)   // ON 1 = you are in the radius, youre at home  - OFF 0 = you left the home
+{ 
+  //restoring int value
+  GPSTrigger = param.asInt();
+  //Store the value on server?
+  Serial.println();
+  Serial.print("GPSTrigger=");
+  Serial.println(GPSTrigger);
+  Serial.println();
+  yield();
+  Blynk.virtualWrite(V17, GPSTrigger); //update state of the buttos as it is on the mcu
+}
+
+BLYNK_WRITE(V18)   // ON 1 = GPSAutoOFF is activated, turn off the heating if it is on manual and there is nobody home   - OFF 0 = deactivated
+{ 
+  //restoring int value
+  GPSAutoOff = param.asInt();
+  Serial.println();
+  Serial.print("GPSAutoOff=");
+  Serial.println(GPSAutoOff);
+  Serial.println();
+  yield();
+}
 
 void timesync() //run this every 5 seconds
 {
-    Blynk.syncVirtual(V12,V17); //synk the time interval and the gps trigger.
     //Every time the hours interval is received from server/app it runs the whole time check.To be improved!!!!!
+    //had a crush right here last time
     rtc.begin();
     yield();
 }
@@ -273,215 +373,211 @@ void connectionstatus()
   connection = Blynk.connected();
   if (connection == 0)
   {
-      connectionattempts ++;
-      Serial.println();
-      Serial.print("connectionattempts");
-      Serial.print(connectionattempts);
-      Serial.println();
-      display.init();
-      display.clear();
-      display.flipScreenVertically();
-      display.setTextAlignment(TEXT_ALIGN_CENTER);
-      display.setFont(ArialMT_Plain_10);
-      display.drawString(64, 0, " CONNECTING ...");  
-      display.drawString(64,2, String(connectionattempts)); 
-      display.display();
-      yield();
+    //Check if it's still connected to wifi!
+    if ( WiFi.status() != WL_CONNECTED )
+    {
+      Serial.println("Wifi Connection Lost!");
+    }
+     connectionattempts ++;
+     Serial.println();
+     Serial.print("connectionattempts");
+     Serial.print(connectionattempts);
+     Serial.println();
+     display.init();
+     display.clear();
+     display.flipScreenVertically();
+     display.setTextAlignment(TEXT_ALIGN_CENTER);
+     display.setFont(ArialMT_Plain_10);
+      
+      //Check if it's still connected to wifi!
+      if ( WiFi.status() != WL_CONNECTED )
+      {
+        Serial.println("Wifi Connection Lost!");
+        display.drawString(64,0, " WiFi Connection Lost!");
+        display.drawString(64,10, "  RECONNECTING ...");  
+        display.drawString(64,20, String("Attempt: ") + String(connectionattempts)); 
+        display.display();
+        yield();         
+      }
+      else
+      {
+        display.drawString(64,0, " Server Connection Lost!"); 
+        display.drawString(64,10, "  RECONNECTING ...");  
+        display.drawString(64,20, "Attempt: " + String(connectionattempts)); 
+        display.display();
+        yield();        
+      }    
   }
   else 
   {
     connectionattempts = 0;
   }
   
-  if (connectionattempts == 5)
+  if (connectionattempts > 5)
   {
-      ESP.restart();  
+    Serial.println("Self Restart!");
+    delay(3000);
+    ESP.restart();  
   }
 }
 
-// This function will be called every time The Widget
-// in Blynk app writes values to the Virtual Pin V12
 
-BLYNK_WRITE(V12) {
-  TimeInputParam t(param);
- 
-  String currentTime = String(hour()) + ":" + minute() + ":" + second();
-  String currentDate = String(day()) + " " + month() + " " + year();
-  Interval = String( String(t.getStartHour()) + ":" + String(t.getStartMinute()) + " - " + String(t.getStopHour()) + ":" + String(t.getStopMinute()));
+void checkInterval()
+{
+    String currentTime = String(Hour) + ":" + String(Minute) + ":" + String(second());
+    //String currentDate = String(day()) + " " + month() + " " + year();
+    Interval = String( String(StartHour) + ":" + String(StartMinute) + " - " + String(StopHour) + ":" + String(StopMinute));
+    yield();
+    Serial.print("Current time: " + String(currentTime));
+    Serial.println();
+    Blynk.syncVirtual(V12,V17); //synk the time interval and the gps trigger.
   
-  yield();
-  Serial.print("Current time: ");
-  Serial.print(currentTime);
-  Serial.print("   ");
-//  Serial.print(currentDate);
-//  Serial.println();
+  /*
+
+  *23:10 - 23:40
+  *2:00 - 2:40
+  *2:50 - 2:20
   
-//    Serial.print(String(" Start: ") +
-//                   t.getStartHour() + ":" +
-//                   t.getStartMinute() + ":" +
-//                   t.getStartSecond());
-//    Serial.print(String("  Stop:") + 
-//                   t.getStopHour() + ":" +
-//                   t.getStopMinute() + ":" +
-//                   t.getStopSecond());
-//    if(interval== 1)
-//    {
-//      Serial.print(" = > Started!");               
-//    }
-//    else
-//    {
-//      Serial.print(" = > Stopped");
-//    }
-//                          
-//    
-//    Serial.println();  Serial.println();
+  22:10 - 2:00
+  10:10 - 2:00
+  3:00 - 1:00 
+  
+  *10:10 - 12:10
+  *10:10 - 22:10
     
+  */
 
-    //--> Starting hour is the same as the ending hour. 
-    if (t.getStartHour() == hour() && hour() == t.getStopHour())   // hours match.check the minutes
+  // 23:10 - 23:40 && 2:00 - 2:40
+  if (Hour == StartHour && StartHour == StopHour && StartMinute < StopMinute) // Less than 1H
+  {
+    if (Minute >= StartMinute && Minute < StopMinute)
     {
-      Serial.println("The Hour is Matching.Check the minutes");
-      if (t.getStartMinute() <= minute() && t.getStopMinute() > minute() )
-      {
-        Serial.println("The start/end Hour is the same, start<Minutes<end ");
-        interval = 1;
-      }
-      if (t.getStartMinute() > minute() )
-      {
-        Serial.println("Minutes are not matching for the interval, Yet.");
-        interval = 0;        
-      }
-      if (t.getStopMinute() < minute() )
-      {
-        Serial.println("minutes>Stop Interval");
-        interval = 0 ;
-      }
+      interval = 1;
+      Serial.println("100");
     }
-    // <--- Starting hour is the same as the ending hour. 
-
-    // Stop time matches the current hour. Check the minutes.
-    if (t.getStopHour() == hour() ) 
+    else
     {
-      if ( t.getStopMinute() <= minute()  ) 
-      {
-        Serial.println("StopTime is passed");
-        interval = 0;
-      }
-      if (t.getStopMinute() > minute() && minute() > t.getStartMinute() )
-      {
-        Serial.println("During the interval. StartMinute<Minute<StopMinute");
-        interval= 1;
-      }
-    }
-    if (t.getStopHour() == t.getStartHour() && t.getStopHour() != hour() )
-    {
-      Serial.println("The Interval is <1H but the current Hour does not match the interval");
       interval = 0;
+      Serial.println("101");
     }
-
-
-    // ---> StartHour > StopHour - It ends next day Eg: 15:00 - 14:00 , 06:00 - 05:00 , 06:00 - 01:00
-    if (t.getStartHour() > t.getStopHour() ) 
+  }
+  
+  
+  // 12:50 - 12:10  12:11
+  if (Hour == StartHour && StartHour == StopHour && StartMinute > StopMinute) // 24H - some Minutes
+  {
+    if (Hour != StartHour)
     {
-      Serial.println("StartHour > StopHour - It ends next day ");
-      if (t.getStartHour() == hour())
-      {
-        Serial.println("StartHour=Hour - During the interval.Check the minutes");
-        if (t.getStartMinute() <= minute() && minute() <= t.getStopMinute() )
-        {
-          Serial.println("StartHour=Hour StartMinute<=Minute<=EndMinute");
-          interval = 1;
-        }
-        if (t.getStartMinute() > minute() || minute() > t.getStopMinute() )
-        {
-          Serial.println("StartHour=Hour StartMinute>Minute or Minute>EndMinute");
-          interval = 0;
-        }
-      }
-      // eg: interval: 15:00 - 3:00 
-      if (t.getStartHour() > hour() && hour() > t.getStopHour() )
-      {
-        Serial.println("current H>StartH && CurrentH > StopH");
-        interval = 0;
-      }
-      if (t.getStartHour() > hour() && hour() == t.getStopHour() )
-      {
-        Serial.println("StartH>Hour && Hour==StopH , check minutes");
-        if (t.getStopMinute() <= minute() )
-        {
-          Serial.println("Few minutes over the given interval. Stop!");
-          interval = 0;
-        }
-        else 
-        {
-          Serial.println("Last Hour.Check the minutes");
-          interval = 1;
-        }
-      }
-      yield();
-      if(t.getStartHour() > hour() && hour() < t.getStopHour() )
-      {
-        Serial.println("StartH>H, H<StopH - During the given interval");
-        interval = 1;
-      }
-
-      //during the interval StartH<H , H>StopH
-      if (t.getStartHour() < hour() && hour() > t.getStopHour() )
-      {
-        Serial.println("during the interval StartH<H , H>StopH");
-        interval = 1;
-      }
-
+      interval = 1;
+      Serial.println("102");
     }
-    // ---> StartHour < StopHour == sameday
-    else if (t.getStartHour() < t.getStopHour() ) 
+    else if (Hour == StartHour)
     {
-      Serial.println("It's endind in the same day");
-      if (t.getStartHour() < hour() && t.getStopHour() > hour() )  
+      if (Minute < StartMinute && Minute > StopMinute) 
       {
-        Serial.println("Current Hour < StartH and CurrentH < StopH.Interval match.No need to check the minutes");
-        interval= 1;
+        interval = 1;
+        Serial.println("103");
       }
-
-      if (t.getStartHour() == hour() )
+      else 
       {
-        Serial.println("Start Hour match.Check the minutes");
-        if (t.getStartMinute() <= minute())
-        {
-          Serial.println("Minutes match, ");
-          interval=1;  
-        }
-        else 
-        {
-          Serial.println("Minutes do not match.Minutes>Startinute.Outside the interval");
-          interval = 0;
-        }
-      }
-      if (t.getStartHour() > hour() )
-      {
-        Serial.println("CurrentH<StartH . Before the interval");
         interval = 0;
+        Serial.println("104");
       }
-      if (t.getStopHour() == hour())
-      {
-        Serial.println("StopH match.Check the Minutes");
-        if (t.getStopMinute() <= minute() )
-        {
-          Serial.println("Minutes passed.Interval Ended");
-          interval = 0;
-        }
-        else if (t.getStopMinute() > minute() )
-        {
-          Serial.println("Minutes<StopMinutes - During the interval");
-          interval = 1;
-        }
-      }
-      
     }
-
-
-yield();
-  Serial.println();
+  }
+  
+  // 10:10 - 12:10 && 10:10 - 22:10 - sameday
+  if (StartHour < StopHour )
+  {
+    if (Hour == StartHour)
+    {
+      if (Minute < StartMinute)
+      {
+        interval = 0;
+        Serial.println("105");
+      }
+      else if (Minute >= StartMinute)
+      {
+        interval = 1;
+        Serial.println("106");
+      }
+    }
+    
+    if (Hour == StopHour)
+    {
+      if (Minute > StopMinute)
+      {
+        interval = 0;
+        Serial.println("107");
+      }
+      else if (Minute <= StopMinute)
+      {
+        interval = 1;
+        Serial.println("108");
+      }
+    }
+    
+    if (Hour > StartHour && Hour < StopHour)
+    {
+      interval = 1;
+      Serial.println("109");
+    }
+  }
+  
+  
+  // 22:10 - 2:00 && 10:10 - 2:00 && 3:00 - 1:00  - next day
+  if (StartHour > StopHour)
+  {
+    if (Hour == StartHour)
+    {
+      if (Minute < StartMinute)
+      {
+        interval = 0;
+        Serial.println("110");
+      }
+      else if (Minute >= StartMinute)
+      {
+        interval = 1;
+        Serial.println("111");
+      }
+    }
+    
+    if (Hour == StopHour)
+    {
+      if (Minute > StopMinute)
+      {
+        interval = 0;
+        Serial.println("112");
+      }
+      else if (Minute <= StopMinute)
+      {
+        interval = 1;
+        Serial.println("113");
+      }
+    }   
+    
+    //23:10 22:10 - 2:00 && 10:10 - 2:00 && 3:00 - 1:00  - next day
+    if (Hour > StartHour)
+    {
+      interval = 1;
+      Serial.println("114");
+    }
+    // 1:00 // 22:10 - 2:00 && 10:10 - 2:00 && 3:00 - 1:00  - next day
+    else if (Hour < StartHour)
+    {
+      if (Hour > StopHour)
+      {
+        interval = 0;
+        Serial.println("115");
+      }
+      else if (Hour < StopHour)
+      {
+        interval = 1;
+        Serial.println("116");
+      }
+    }
+  }
+  yield();
 }
 
 
@@ -546,27 +642,31 @@ void sendTemp()
   display_temp = t;
   display_humid = h;
   
-  Serial.println(display_temp);
-  Serial.println(display_humid);
-
-
+ Serial.println(display_temp);
+ Serial.println(display_humid);
+ 
   // You can send any value at any time.
   // Please don't send more that 10 values per second.
   Blynk.virtualWrite(V10, t); //temperature on virtual pin V5
   Blynk.virtualWrite(V11, h); //humidity on virtual pin V6
   yield();
+}
+
+
+void HeatingLogic()
+{
+  checkInterval();
   if (scheduled == 1) {
     Serial.println("By Time");
     Serial.println();
     Serial.print("interval=");
     Serial.println(interval);
     Serial.println();
-    
     if (interval == 1 ) {
-        TempCompare();  // do the relay thing if the right time comes and the temperature thing
-        Serial.println("Heating was turned ON at the right time in interval");
-        ledInterval.on();  
-        yield();     
+      TempCompare();  // do the relay thing if the right time comes and the temperature thing
+      Serial.println("Heating was turned ON at the right time in interval");
+      ledInterval.on();  
+      yield();     
     } 
     else {
       HeatOff();
@@ -576,22 +676,27 @@ void sendTemp()
       Serial.println("Heating was turned off because the interval is passed");
       yield();
     }
- }
-  else { // scheduled == 0
+  }
+  else { // Not Scheduled!
     if (GPSAutoOff == 0){
+      ledGPSAutoOff.off();
       TempCompare();  
       Serial.println("Thermostat is running non stop");   
       yield();
     }
-    if (GPSAutoOff == 1){ // GPSAutoOff is activated.When its on manual,keep heating only if you are at home
+    else 
+    { // GPSAutoOff is activated.When its on manual,keep heating only if you are at home
+      ledGPSAutoOff.on();
       if (GPSTrigger == 0) //triggering when you leave the home
       {
+        ledGPSTrigger.on();
         TempCompare();  
-        Serial.println("Thermostat is running again because you came back");   
+        Serial.println("Thermostat is running again because you are at home!");   
         yield();
       }
-      else if (GPSTrigger == 1)
+      else
       {
+        ledGPSTrigger.off();
         HeatOff();
         STOPPED = 0; 
         HEATING = 0;
@@ -599,138 +704,56 @@ void sendTemp()
         yield(); 
       }
     }
-
   }
-  
- Blynk.virtualWrite(V13, tempset);       // store tempset on server  
-       yield();
 }
 
-
-
-BLYNK_WRITE(V13)
+void TempCompare()
 {
-  //restoring int value
-  tempset = param.asInt();
-  Serial.println("tempset updated");
-  yield();
-}
-
-BLYNK_WRITE(V15) // ajust tempset by app buttons
-{
-  int stepperValue = param.asInt();
-  if (stepperValue == 1)       // assigning incoming value from pin V1 to a variable
-  {
-    tempset++;
-    Blynk.virtualWrite(V13, tempset);
-    Serial.println(tempset);
-    displayData();
-    yield();
-  }
-  else if (stepperValue == -1) 
-  {
-    tempset--;
-    Blynk.virtualWrite(V13, tempset);
-    Serial.println(tempset);
-    yield();
-    displayData();
-  }
-  // process received value
-  Blynk.virtualWrite(V13, tempset);
-  yield();
-  Serial.println(param.asInt());  
-  Serial.println(stepperValue);  
-}
-
-
-BLYNK_WRITE(V16)   // ON 1 = scheduled   - OFF 0 = manual(check temperature allways)
-{ 
-
-  //restoring int value
-  scheduled = param.asInt();
-  Serial.println();
-  Serial.print("scheduled=");
-  Serial.println(scheduled);
-  Serial.println();
-  yield();
-  //Blynk.virtualWrite(V16, scheduled); //update state of the buttos as it is on the mcu
-}
-
-
-BLYNK_WRITE(V17)   // ON 1 = you are in the radius, youre at home  - OFF 0 = you left the home
-{ 
-
-  //restoring int value
-  GPSTrigger = param.asInt();
-  if (GPSTrigger == 0)
-  {
-    ledGPSTrigger.on();
-  }
-  else if (GPSTrigger == 1) // nobody is at home
-  {
-    ledGPSTrigger.off();    
-  }
-  Serial.println();
-  Serial.print("GPSTrigger=");
-  Serial.println(GPSTrigger);
-  Serial.println();
-  yield();
-  //Blynk.virtualWrite(V17, GPSTrigger); //update state of the buttos as it is on the mcu
-}
-
-BLYNK_WRITE(V18)   // ON 1 = GPSAutoOFF is activated, turn off the heating if it is on manual and there is nobody home   - OFF 0 = deactivated
-{ 
-
-  //restoring int value
-  GPSAutoOff = param.asInt();
-  if (GPSAutoOff == 1)
-  {
-    ledGPSAutoOff.on();
-  }
-  else if (GPSAutoOff == 0)
-  {
-    ledGPSAutoOff.off();
-  }
-  
-  Serial.println();
-  Serial.print("GPSAutoOff=");
-  Serial.println(GPSAutoOff);
-  Serial.println();
-  yield();
-  //Blynk.virtualWrite(V18, GPSAutoOff); //update state of the buttos as it is on the mcu
-}
-
-
-void ButtonsUpDown()
-{
-  UpState = digitalRead(upPin);
-  if (UpState != prevUpState) {
-    if (UpState == LOW) {
-      tempset++;
-      Blynk.virtualWrite(V13, tempset);    
-      displayDataBig();
-      Serial.println("Increased!");
-      Serial.println(tempset);
-      delay(100);  
-      yield();
+  tempset2 = tempset-1;   
+  // incepe din starea
+  // HEATING = 0
+  // STOPPED = 0
+            
+  if (HEATING == 0 && STOPPED == 0){
+    if (tempset2 > t){
+      HeatOn();
+      //Blynk.setProperty(V5, "color", "purple");    
+      Serial.println("Heating Just Started!");        
     }
-    prevUpState = UpState;
-  }
-
-  DownState = digitalRead(downPin);
-  if (DownState != prevDownState) {
-    if (DownState == LOW) {
-      tempset--;
-      Blynk.virtualWrite(V13, tempset);         
-      displayDataBig();
-      Serial.println("Decreased!");  
-      Serial.println(tempset);
-      delay(100);            
+    else {
+      HeatOff();
+      STOPPED = 0;
+      Serial.println("Keep it OFF!");
     }
-    prevDownState = DownState;
+  }
+          
+  else if (HEATING == 1){
+    if (t > tempset){ // 
+      HeatOff();
+      STOPPED = 1;
+      //Blynk.setProperty(V5, "color", "green");
+      Serial.println("Temp was reached.Wait till it drops by 1C");
+    }
+    else {
+      HeatOn();
+      STOPPED = 0; 
+      //Blynk.setProperty(V5, "color", "red");  
+      Serial.println("Heating...");         
+    }
+  }    
+  else if (STOPPED == 1){         
+    if (t < tempset2){ // start heating again only if the temp dropped by one deg
+      HeatOn();
+      //Blynk.setProperty(V5, "color", "red");                             
+      STOPPED = 0;
+      Serial.println("Temp dropped by one deg.Start heating again");
+    }
+    else {
+      HeatOff();
+      Serial.println("Keep it off till it drops by one deg");              
+    }
   }
 }
-
 
 
 void HeatOn() 
@@ -751,56 +774,33 @@ void HeatOff()
   yield();
 }
 
-void TempCompare()
+void ButtonsUpDown()
 {
-   yield();
-   tempset2 = tempset-1;   
-          // incepe din starea
-          // HEATING = 0
-          // STOPPED = 0
-            
-          if (HEATING == 0 && STOPPED == 0){
-            if (tempset > t){
-              HeatOn();
-              //Blynk.setProperty(V5, "color", "purple");    
-              Serial.println("Heating Just Started!");        
-            }
-            else {
-               HeatOff();
-               STOPPED = 0;
-               Serial.println("Keep it OFF!");
-            }
+  UpState = digitalRead(upPin);
+  if (UpState != prevUpState) {
+    if (UpState == LOW) {
+      tempset++;
+      Blynk.virtualWrite(V13, tempset);    
+      displayDataBig();
+     Serial.println("Increased!");
+     Serial.println(tempset);
+      delay(100);  
+      yield();
+    }
+    prevUpState = UpState;
+  }
 
-          }
-          
-          else if (HEATING == 1){
-            if (t > tempset){ // 
-              HeatOff();
-              STOPPED = 1;
-              //Blynk.setProperty(V5, "color", "green");
-              Serial.println("Temp was reached.Wait till it drops by 1C");
-            }
-            else {
-              HeatOn();
-              STOPPED = 0; 
-              //Blynk.setProperty(V5, "color", "red");  
-              Serial.println("Heating...");         
-            }
-          }
-
-         
-          else if (STOPPED == 1){         
-            if (t < tempset2){ // start heating again only if the temp dropped by one deg
-              HeatOn();
-              //Blynk.setProperty(V5, "color", "red");                             
-              STOPPED = 0;
-              Serial.println("Temp dropped by one deg.Start heating again");
-            }
-            else {
-              HeatOff();
-              Serial.println("Keep it off till it drops by one deg");              
-            }
-          }
+  DownState = digitalRead(downPin);
+  if (DownState != prevDownState) {
+    if (DownState == LOW) {
+      tempset--;
+      Blynk.virtualWrite(V13, tempset);         
+      displayDataBig();
+     Serial.println("Decreased!");  
+     Serial.println(tempset);
+      delay(100);            
+    }
+    prevDownState = DownState;
+  }
 }
-
 
