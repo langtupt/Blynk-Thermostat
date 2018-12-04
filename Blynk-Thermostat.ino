@@ -1,4 +1,4 @@
-#define NAMEandVERSION "Blynk-ThermostatV3.1"
+#define NAMEandVERSION "Blynk-ThermostatV3.2"
 /*************************************************************
   Download latest Blynk library here:
     https://github.com/blynkkk/blynk-library/releases/latest
@@ -109,12 +109,12 @@ bool connection;
 
 // You should get Auth Token in the Blynk App.
 // Go to the Project Settings (nut icon).
-char auth[] = "xxxxxxxxxxxxxx";
+char auth[] = "auth";
 
 // Your WiFi credentials.
 // Set password to "" for open networks.
 char ssid[] = "Home";
-char pass[] = "xxxxxxxxxxxxxx";
+char pass[] = "pass";
 
 #define relay D1 //  relay  on GPIO5 , D1
 
@@ -192,12 +192,15 @@ void displayInitSeq()
   display.setFont(ArialMT_Plain_10);
   display.drawString(64, 0, String(NAMEandVERSION)); 
   display.display();
-  WiFi.begin(ssid, pass);  
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(1000);
+  WiFi.begin(ssid, pass);
+  delay(5000);  
+  if (WiFi.status() != WL_CONNECTED) {
     Serial.print(".");
-    display.drawString(64, 10, "Connecting to Wifi...");
+    display.drawString(64, 10, "Connection to Wifi...");
+    display.drawString(64, 20, "FAILED!");
+    delay(2000);
     display.display();
+    ESP.restart(); 
   }
   Serial.println("");
   Serial.println("WiFi connected");
@@ -346,6 +349,17 @@ BLYNK_WRITE(V17)   // ON 1 = you are in the radius, youre at home  - OFF 0 = you
   Serial.println();
   yield();
   Blynk.virtualWrite(V17, GPSTrigger); //update state of the buttos as it is on the mcu
+  if(scheduled == 0)
+  {
+    if (GPSTrigger == 1)
+    {
+      Blynk.notify("C YA!");
+    }
+    else
+    {
+      Blynk.notify("Welcome Back!");
+    }
+  }
 }
 
 BLYNK_WRITE(V18)   // ON 1 = GPSAutoOFF is activated, turn off the heating if it is on manual and there is nobody home   - OFF 0 = deactivated
@@ -369,44 +383,38 @@ void timesync() //run this every 5 seconds
 
 
 void connectionstatus()
-{
+{ 
   connection = Blynk.connected();
   if (connection == 0)
   {
     //Check if it's still connected to wifi!
     if ( WiFi.status() != WL_CONNECTED )
     {
+      Serial.println();
+      Serial.print("connectionattempts");
+      Serial.print(connectionattempts);
+      Serial.println();
+      display.init();
+      display.clear();
+      display.flipScreenVertically();
+      display.setTextAlignment(TEXT_ALIGN_CENTER);
+      display.setFont(ArialMT_Plain_10);
       Serial.println("Wifi Connection Lost!");
+      display.drawString(64,0, " WiFi Connection Lost!");
+      display.drawString(64,10, "  RECONNECTING ...");  
+      display.drawString(64,20, String("Attempt: ") + String(connectionattempts)); 
+      display.display();
+      yield();         
     }
-     connectionattempts ++;
-     Serial.println();
-     Serial.print("connectionattempts");
-     Serial.print(connectionattempts);
-     Serial.println();
-     display.init();
-     display.clear();
-     display.flipScreenVertically();
-     display.setTextAlignment(TEXT_ALIGN_CENTER);
-     display.setFont(ArialMT_Plain_10);
-      
-      //Check if it's still connected to wifi!
-      if ( WiFi.status() != WL_CONNECTED )
-      {
-        Serial.println("Wifi Connection Lost!");
-        display.drawString(64,0, " WiFi Connection Lost!");
-        display.drawString(64,10, "  RECONNECTING ...");  
-        display.drawString(64,20, String("Attempt: ") + String(connectionattempts)); 
-        display.display();
-        yield();         
-      }
-      else
-      {
+    else
+    {
         display.drawString(64,0, " Server Connection Lost!"); 
         display.drawString(64,10, "  RECONNECTING ...");  
         display.drawString(64,20, "Attempt: " + String(connectionattempts)); 
         display.display();
         yield();        
-      }    
+    }
+    connectionattempts ++;    
   }
   else 
   {
@@ -803,4 +811,3 @@ void ButtonsUpDown()
     prevDownState = DownState;
   }
 }
-
